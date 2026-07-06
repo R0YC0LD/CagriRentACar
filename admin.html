@@ -34,6 +34,8 @@
     window.db = getFirestore(app);
     window.firestoreTools = { collection, addDoc, setDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot };
     console.log("Firebase initialized inside Admin Panel with Real-time listener support!");
+    // Signal to admin.js that Firebase is ready
+    window.dispatchEvent(new Event('firebaseReady'));
   </script>
 </head>
 <body class="bg-[#FDFCF8] text-[#121214] font-sans antialiased selection:bg-[#C5A059]/20 selection:text-[#C5A059]">

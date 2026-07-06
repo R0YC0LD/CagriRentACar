@@ -492,9 +492,33 @@ document.addEventListener('DOMContentLoaded', () => {
   initNavbarScrollEffect();
   initContactForm();
   checkEmailLinkVerification();
-  checkAndSeedDatabase();
-  initRealtimeSync();
+
+  // Firebase module is type="module" (async) — wait for it to be ready
+  function onFirebaseReady() {
+    checkAndSeedDatabase();
+    initRealtimeSync();
+  }
+
+  if (window.db && window.firestoreTools) {
+    // Firebase already ready (rare but possible)
+    onFirebaseReady();
+  } else {
+    // Wait for the firebaseReady event dispatched by index.html module script
+    window.addEventListener('firebaseReady', onFirebaseReady, { once: true });
+    // Safety timeout: if event never fires (CDN issue), show warning after 8s
+    setTimeout(() => {
+      if (!window.db) {
+        console.warn('Firebase could not be initialized. Check your internet connection.');
+        isDbLoading = false;
+        renderFleetCatalog();
+        renderFAQAccordion();
+        renderTestimonials();
+        renderWeeklyFeatured();
+      }
+    }, 8000);
+  }
 });
+
 
 // Smooth Scroll
 function initLenisSmoothScroll() {

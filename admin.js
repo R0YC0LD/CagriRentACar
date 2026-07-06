@@ -164,7 +164,6 @@ let customAdminPassword = ADMIN_PASSWORD_PRIMARY;
 let isDbLoading = true;
 
 let isAdminLoggedIn = sessionStorage.getItem('cagri_admin_logged_in') === 'true';
-localStorage.setItem('vehicles', JSON.stringify(vehicles));
 let editingCarId = null;
 let editingFaqId = null;
 let tempCarImages = [];
@@ -173,9 +172,28 @@ let tempCarImages = [];
 document.addEventListener('DOMContentLoaded', () => {
   updateUIForLoginState();
   initFormInputsFromPOSConfig();
-  checkAndSeedDatabase();
-  initRealtimeSync();
+
+  // Firebase module is type="module" (async) — wait for it to be ready
+  function onFirebaseReady() {
+    checkAndSeedDatabase();
+    initRealtimeSync();
+  }
+
+  if (window.db && window.firestoreTools) {
+    onFirebaseReady();
+  } else {
+    window.addEventListener('firebaseReady', onFirebaseReady, { once: true });
+    // Safety timeout
+    setTimeout(() => {
+      if (!window.db) {
+        console.warn('Firebase could not be initialized in Admin Panel.');
+        isDbLoading = false;
+        renderAdminTable();
+      }
+    }, 8000);
+  }
 });
+
 
 // Toast System
 function showToast(message, type = 'info') {
