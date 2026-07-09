@@ -12,7 +12,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260709">
   
   <!-- Animation & Smooth Scroll Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
@@ -23,11 +23,10 @@
 
   <!-- Updated Firebase Web SDK v12.15.0 Integration -->
   <script type="module">
-    // Import the functions you need from the SDKs you need
+    // Only the essentials are imported statically: if analytics or auth are
+    // blocked (ad blockers, Opera VPN, etc.) Firestore sync must still work.
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-analytics.js";
     import { getFirestore, collection, addDoc, setDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-    import { getAuth, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
     // Your web app's Firebase configuration
     const firebaseConfig = {
@@ -42,14 +41,25 @@
 
     // Initialize Firebase
     const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
     window.db = getFirestore(app);
     window.firestoreTools = { collection, addDoc, setDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot };
-    window.auth = getAuth(app);
-    window.authTools = { sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink };
     console.log("Firebase v12.15.0 initialized successfully for rentacar-227eb!");
     // Signal to app.js that Firebase is ready
     window.dispatchEvent(new Event('firebaseReady'));
+
+    // Auth (email-link review verification) — optional, must not block Firestore
+    import("https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js")
+      .then(({ getAuth, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink }) => {
+        window.auth = getAuth(app);
+        window.authTools = { sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink };
+        window.dispatchEvent(new Event('firebaseAuthReady'));
+      })
+      .catch((err) => console.warn("Firebase Auth could not be loaded (blocked or offline):", err));
+
+    // Analytics — optional, frequently blocked by ad blockers
+    import("https://www.gstatic.com/firebasejs/12.15.0/firebase-analytics.js")
+      .then(({ getAnalytics }) => getAnalytics(app))
+      .catch((err) => console.warn("Firebase Analytics could not be loaded (blocked or offline):", err));
   </script>
 </head>
 <body class="bg-[#FDFCF8] text-[#121214] font-sans antialiased selection:bg-[#C5A059]/20 selection:text-[#C5A059]">
@@ -638,7 +648,7 @@
 
 
   <!-- App Main Logic Script -->
-  <script src="app.js"></script>
+  <script src="app.js?v=20260709"></script>
 
 </body>
 </html>

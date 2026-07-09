@@ -12,15 +12,39 @@
       "**/.*",
       "**/node_modules/**",
       "cagri_rentacar_noble.canvas",
-      "FIREBASE_KURULUM.txt"
+      "FIREBASE_KURULUM_VE_KURALLAR.txt",
+      "adminşifre.txt",
+      "PROJECT.md",
+      "TEST_INFRA.md",
+      "TEST_READY.md",
+      "test_out.txt",
+      "verify_e2e.js"
     ],
     "headers": [
       {
-        "source": "**/*.@(jpg|jpeg|gif|png|svg|webp|css|js)",
+        "source": "**/*.@(jpg|jpeg|gif|png|svg|webp)",
         "headers": [
           {
             "key": "Cache-Control",
             "value": "max-age=31536000"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(css|js)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "**/*.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
           }
         ]
       }

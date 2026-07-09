@@ -343,6 +343,10 @@ document.addEventListener('DOMContentLoaded', () => {
   initNavbarScrollEffect();
   initContactForm();
   checkEmailLinkVerification();
+  // Auth SDK loads lazily (survives ad blockers) — re-check once it arrives
+  if (!window.authTools) {
+    window.addEventListener('firebaseAuthReady', () => checkEmailLinkVerification(), { once: true });
+  }
 
   // Firebase module is type="module" (async) — wait for it to be ready
   function onFirebaseReady() {

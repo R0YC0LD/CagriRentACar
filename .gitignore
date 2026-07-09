@@ -1,5 +1,12 @@
 # Hassas bilgiler
 adminşifre.txt
+FIREBASE_KURULUM_VE_KURALLAR.txt
+
+# Yerel çalışma dosyaları
+.agents/
+.kombai/
+.claude/
+cagri_rentacar_noble.canvas
 
 # Test dosyaları
 test_out.txt
