@@ -70,8 +70,8 @@ const TRANSLATIONS = {
     step1Desc: "Geniş ve bakımlı VIP araç koleksiyonumuzdan tarzınıza en uygun modeli seçin, tarihlerinizi belirleyin.",
     step2Title: "Dijital Sürücü Doğrulaması",
     step2Desc: "Ehliyet ve kimlik bilgilerinizi güvenli altyapımıza yükleyin. Uzman ekibimiz saniyeler içinde onaylasın.",
-    step3Title: "3D Secure Güvenli Ödeme",
-    step3Desc: "Sanal POS üzerinden kiralama bedeli veya kaporayı güvenle ödeyin. Sürpriz ek maliyet ve saklı ücret yoktur.",
+    step3Title: "Güvenli Online Ödeme",
+    step3Desc: "Kiralama bedelini anlaşmalı ödeme kuruluşunun güvenli sayfasında ödeyin. Kart bilgileriniz sitemizden geçmez; sürpriz ek maliyet yoktur.",
     step4Title: "7/24 VIP Valet Teslimat",
     step4Desc: "Seçtiğiniz havalimanı terminalinde veya adresinizde aracınız tertemiz ve dolu depo ile kapınıza teslim edilir.",
     statsFleet: "LÜKS ARAÇ FİLOSU",
@@ -157,8 +157,8 @@ const TRANSLATIONS = {
     step1Desc: "Choose the model that fits your style from our wide and pristine VIP vehicle collection, then set your dates.",
     step2Title: "Digital Driver Verification",
     step2Desc: "Upload your driver license and ID credentials to our secure engine. Our team approves in seconds.",
-    step3Title: "3D Secure Payment",
-    step3Desc: "Securely pay your rental fee or security deposit via Virtual POS. Zero surprise costs or hidden fees.",
+    step3Title: "Secure Online Payment",
+    step3Desc: "Pay your rental fee on our payment partner's secure page. Your card details never pass through our site — zero surprise costs.",
     step4Title: "24/7 VIP Valet Delivery",
     step4Desc: "At your selected airport terminal or private address, your vehicle is delivered immaculate with a full fuel tank.",
     statsFleet: "LUXURY FLEET CARS",
@@ -199,13 +199,16 @@ const TRANSLATIONS = {
 
 // Initial POS Config & State
 
-const INITIAL_POS_CONFIG = {
-  provider: 'PayTR',
-  merchantId: '123456',
-  apiKey: 'paytr_live_key_984128941',
-  secretKey: 'paytr_secret_key_841294812',
-  is3DSecure: true,
-  isTestMode: true
+const DEFAULT_PAYMENT_SETTINGS = {
+  providerName: 'iyzico',
+  paymentLink: '',
+  enabled: false
+};
+
+const DEFAULT_EXTRAS_SETTINGS = {
+  fullKasko: { label: 'Muafiyetsiz Tam Kasko Güvencesi', desc: 'Kaza ve çizilmelere karşı %100 sıfır muafiyet.', price: 500, perDay: true, enabled: true },
+  unlimitedKm: { label: 'Sınırsız Kilometre Paketi', desc: 'Günlük kilometre sınırı olmadan özgürce kullanın.', price: 350, perDay: true, enabled: true },
+  vipValet: { label: 'VIP Vale ve Adrese Teslimat', desc: 'Aracınız dilediğiniz adrese teslim edilir ve alınır.', price: 450, perDay: false, enabled: true }
 };
 
 let currentLang = localStorage.getItem('cagri_lang') || 'TR';
@@ -215,7 +218,8 @@ let faqs = [];
 let testimonials = [];
 let reservations = [];
 let favorites = JSON.parse(localStorage.getItem('cagri_favorites')) || [];
-let posConfig = INITIAL_POS_CONFIG;
+let paymentSettings = { ...DEFAULT_PAYMENT_SETTINGS };
+let extrasSettings = JSON.parse(JSON.stringify(DEFAULT_EXTRAS_SETTINGS));
 let customAdminPassword = ADMIN_PASSWORD_PRIMARY;
 let isDbLoading = true;
 
@@ -750,6 +754,23 @@ function initRealtimeSync() {
       saveState();
       renderWeeklyFeatured();
     });
+
+    // 5. Listen to Settings (payment link & extras)
+    onSnapshot(collection(window.db, "settings"), (snapshot) => {
+      snapshot.forEach((d) => {
+        if (d.id === 'payment') {
+          paymentSettings = { ...DEFAULT_PAYMENT_SETTINGS, ...d.data() };
+        }
+        if (d.id === 'extras') {
+          const data = d.data();
+          const merged = {};
+          for (const key in DEFAULT_EXTRAS_SETTINGS) {
+            merged[key] = { ...DEFAULT_EXTRAS_SETTINGS[key], ...(data[key] || {}) };
+          }
+          extrasSettings = merged;
+        }
+      });
+    });
   }
 }
 
@@ -965,7 +986,8 @@ function renderFleetCatalog() {
     }
 
     const translatedFuel = currentLang === 'EN' ? (car.fuel === 'Dizel' ? 'Diesel' : car.fuel === 'Benzin' ? 'Petrol' : car.fuel === 'Hibrit' ? 'Hybrid' : car.fuel) : car.fuel;
-    const translatedTrans = currentLang === 'EN' ? 'Automatic' : car.transmission;
+    const translatedTrans = car.transmission ? (currentLang === 'EN' ? (car.transmission === 'Manuel' ? 'Manual' : 'Automatic') : car.transmission) : '';
+    const subInfo = [car.year, translatedTrans, car.plate].filter(Boolean).join(' • ');
 
     return `
       <div class="car-card">
@@ -977,7 +999,7 @@ function renderFleetCatalog() {
           </button>
 
           <div style="position: absolute; top: 18px; left: 18px; display: flex; flex-direction: column; gap: 6px;">
-            <span class="badge-tag" style="background: rgba(18, 18, 20, 0.85); color: white; backdrop-filter: blur(4px);">${car.badge}</span>
+            ${car.badge ? `<span class="badge-tag" style="background: rgba(18, 18, 20, 0.85); color: white; backdrop-filter: blur(4px);">${car.badge}</span>` : ''}
           </div>
 
           <div style="position: absolute; bottom: 14px; right: 18px;">
@@ -992,9 +1014,9 @@ function renderFleetCatalog() {
           <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
             <div>
               <h3 class="font-serif text-2xl" style="font-weight: 700;">${car.brand} ${car.model}</h3>
-              <p style="font-size: 0.7rem; font-weight: 700; color: #64748B; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 2px;">
-                ${car.year} • ${translatedTrans} • ${car.plate}
-              </p>
+              ${subInfo ? `<p style="font-size: 0.7rem; font-weight: 700; color: #64748B; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 2px;">
+                ${subInfo}
+              </p>` : ''}
             </div>
             <div style="text-align: right;">
               <p style="font-size: 0.65rem; font-weight: 800; color: #94A3B8; text-transform: uppercase;">${dict.dailyPriceLabel}</p>
@@ -1007,20 +1029,20 @@ function renderFleetCatalog() {
               <i class="ri-gas-station-line"></i>
               <span>${translatedFuel}</span>
             </div>
-            <div class="car-spec-item">
+            ${car.seats ? `<div class="car-spec-item">
               <i class="ri-user-3-line"></i>
               <span>${car.seats} ${currentLang === 'EN' ? 'Seats' : 'Kişi'}</span>
-            </div>
-            <div class="car-spec-item">
+            </div>` : ''}
+            ${car.luggage ? `<div class="car-spec-item">
               <i class="ri-suitcase-2-line"></i>
               <span>${car.luggage} ${currentLang === 'EN' ? 'Bags' : 'Bagaj'}</span>
-            </div>
+            </div>` : ''}
           </div>
 
           <div style="display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 12px;">
             <div>
-              <span style="font-size: 0.65rem; font-weight: 700; color: #94A3B8; text-transform: uppercase;">${dict.depositLabel}</span>
-              <p style="font-size: 0.9rem; font-weight: 800; color: var(--noble-charcoal);">₺${car.deposit.toLocaleString('tr-TR')}</p>
+              ${car.deposit ? `<span style="font-size: 0.65rem; font-weight: 700; color: #94A3B8; text-transform: uppercase;">${dict.depositLabel}</span>
+              <p style="font-size: 0.9rem; font-weight: 800; color: var(--noble-charcoal);">₺${car.deposit.toLocaleString('tr-TR')}</p>` : ''}
             </div>
 
             <div style="display: flex; gap: 6px;">
@@ -1155,19 +1177,19 @@ function openComparisonModal() {
             </tr>
             <tr style="border-t: 1px solid #E2E8F0;">
               <td style="padding: 14px; font-weight: 800; color: #64748B;">Yakıt / Vites</td>
-              ${selectedCars.map(c => `<td style="padding: 14px; text-align: center;">${c.fuel} / ${c.transmission}</td>`).join('')}
+              ${selectedCars.map(c => `<td style="padding: 14px; text-align: center;">${[c.fuel, c.transmission].filter(Boolean).join(' / ') || '—'}</td>`).join('')}
             </tr>
             <tr style="border-t: 1px solid #E2E8F0;">
               <td style="padding: 14px; font-weight: 800; color: #64748B;">Motor Gücü</td>
-              ${selectedCars.map(c => `<td style="padding: 14px; text-align: center; font-weight: 700;">${c.power}</td>`).join('')}
+              ${selectedCars.map(c => `<td style="padding: 14px; text-align: center; font-weight: 700;">${c.power ? (typeof c.power === 'number' ? c.power + ' HP' : c.power) : '—'}</td>`).join('')}
             </tr>
             <tr style="border-t: 1px solid #E2E8F0;">
               <td style="padding: 14px; font-weight: 800; color: #64748B;">0-100 Hızlanma</td>
-              ${selectedCars.map(c => `<td style="padding: 14px; text-align: center; font-weight: 700;">${c.acceleration}</td>`).join('')}
+              ${selectedCars.map(c => `<td style="padding: 14px; text-align: center; font-weight: 700;">${c.acceleration ? (typeof c.acceleration === 'number' ? c.acceleration + ' sn' : c.acceleration) : '—'}</td>`).join('')}
             </tr>
             <tr style="border-t: 1px solid #E2E8F0;">
               <td style="padding: 14px; font-weight: 800; color: #64748B;">Kapora Bedeli</td>
-              ${selectedCars.map(c => `<td style="padding: 14px; text-align: center; font-weight: 700;">₺${c.deposit.toLocaleString('tr-TR')}</td>`).join('')}
+              ${selectedCars.map(c => `<td style="padding: 14px; text-align: center; font-weight: 700;">${c.deposit ? '₺' + c.deposit.toLocaleString('tr-TR') : '—'}</td>`).join('')}
             </tr>
             <tr style="border-t: 1px solid #E2E8F0;">
               <td style="padding: 14px; font-weight: 800; color: #64748B;">İşlem</td>
@@ -1207,9 +1229,9 @@ function openCarDetailModal(carId) {
         <img id="detail-gallery-main" src="${carImages[0]}" alt="${car.brand} ${car.model}" class="gallery-main-img shadow-lg">
         
         <div style="position: absolute; bottom: 20px; left: 24px; color: white; background: rgba(18,18,20,0.7); backdrop-filter: blur(8px); padding: 12px 20px; border-radius: 16px;">
-          <span class="badge-tag" style="background: var(--noble-gold); color: black; font-weight: 800; margin-bottom: 4px;">${car.badge}</span>
+          ${car.badge ? `<span class="badge-tag" style="background: var(--noble-gold); color: black; font-weight: 800; margin-bottom: 4px;">${car.badge}</span>` : ''}
           <h2 class="font-serif text-3xl" style="font-weight: 700;">${car.brand} ${car.model}</h2>
-          <p style="font-size: 0.75rem; opacity: 0.8; letter-spacing: 0.1em; text-transform: uppercase;">${car.year} Model • Plaka: ${car.plate}</p>
+          ${(car.year || car.plate) ? `<p style="font-size: 0.75rem; opacity: 0.8; letter-spacing: 0.1em; text-transform: uppercase;">${[car.year ? `${car.year} Model` : '', car.plate ? `Plaka: ${car.plate}` : ''].filter(Boolean).join(' • ')}</p>` : ''}
         </div>
       </div>
 
@@ -1228,38 +1250,49 @@ function openCarDetailModal(carId) {
 
       <div class="modal-card-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 32px;">
         <div>
-          <h4 style="font-size: 0.75rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #64748B; margin-bottom: 16px;">
-            ${currentLang === 'EN' ? 'Performance & Technical Specs' : 'Performans & Teknik Özellikler'}
-          </h4>
-          
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px;">
-            <div style="background: #F8FAFC; padding: 14px; border-radius: 16px; border: 1px solid #E2E8F0; text-align: center;">
-              <i class="ri-dashboard-3-line" style="font-size: 1.4rem; color: var(--noble-gold);"></i>
-              <p style="font-size: 0.65rem; font-weight: 700; color: #94A3B8; uppercase; margin-top: 4px;">MOTOR GÜCÜ</p>
-              <p style="font-size: 0.95rem; font-weight: 800;">${car.power}</p>
-            </div>
-            <div style="background: #F8FAFC; padding: 14px; border-radius: 16px; border: 1px solid #E2E8F0; text-align: center;">
-              <i class="ri-speed-up-line" style="font-size: 1.4rem; color: var(--noble-gold);"></i>
-              <p style="font-size: 0.65rem; font-weight: 700; color: #94A3B8; uppercase; margin-top: 4px;">0-100 HIZLANMA</p>
-              <p style="font-size: 0.95rem; font-weight: 800;">${car.acceleration}</p>
-            </div>
-            <div style="background: #F8FAFC; padding: 14px; border-radius: 16px; border: 1px solid #E2E8F0; text-align: center;">
-              <i class="ri-rocket-line" style="font-size: 1.4rem; color: var(--noble-gold);"></i>
-              <p style="font-size: 0.65rem; font-weight: 700; color: #94A3B8; uppercase; margin-top: 4px;">MAKSİMUM HIZ</p>
-              <p style="font-size: 0.95rem; font-weight: 800;">${car.topSpeed}</p>
-            </div>
-          </div>
+          ${(() => {
+            const en = currentLang === 'EN';
+            const specs = [];
+            if (car.year) specs.push({ icon: 'ri-calendar-2-line', label: en ? 'MODEL YEAR' : 'MODEL YILI', value: car.year });
+            if (car.transmission) specs.push({ icon: 'ri-steering-2-line', label: en ? 'TRANSMISSION' : 'VİTES', value: en ? (car.transmission === 'Manuel' ? 'Manual' : 'Automatic') : car.transmission });
+            if (car.fuel) specs.push({ icon: 'ri-gas-station-line', label: en ? 'FUEL' : 'YAKIT', value: car.fuel });
+            if (car.power) specs.push({ icon: 'ri-dashboard-3-line', label: en ? 'ENGINE POWER' : 'MOTOR GÜCÜ', value: (typeof car.power === 'number') ? `${car.power} HP` : car.power });
+            if (car.acceleration) specs.push({ icon: 'ri-speed-up-line', label: en ? '0-100 KM/H' : '0-100 HIZLANMA', value: (typeof car.acceleration === 'number') ? `${car.acceleration} sn` : car.acceleration });
+            if (car.topSpeed) specs.push({ icon: 'ri-rocket-line', label: en ? 'TOP SPEED' : 'MAKSİMUM HIZ', value: car.topSpeed });
+            if (car.consumption) specs.push({ icon: 'ri-drop-line', label: en ? 'CONSUMPTION' : 'TÜKETİM', value: `${car.consumption} lt/100km` });
+            if (car.seats) specs.push({ icon: 'ri-user-3-line', label: en ? 'SEATS' : 'KOLTUK', value: car.seats });
+            if (car.luggage) specs.push({ icon: 'ri-suitcase-2-line', label: en ? 'LUGGAGE' : 'BAGAJ', value: `${car.luggage} ${en ? 'Bags' : 'Bavul'}` });
+            if (car.color) specs.push({ icon: 'ri-palette-line', label: en ? 'COLOR' : 'RENK', value: car.color });
 
-          <h4 style="font-size: 0.75rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #64748B; margin-bottom: 12px;">
-            ${currentLang === 'EN' ? 'Featured VIP Equipment' : 'Öne Çıkan VIP Donanımlar'}
-          </h4>
-          <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px;">
-            ${car.features.map(f => `
-              <span style="background: var(--noble-gold-light); color: var(--noble-charcoal); padding: 6px 14px; border-radius: 99px; font-size: 0.72rem; font-weight: 700;">
-                <i class="ri-checkbox-circle-fill" style="color: var(--noble-gold); margin-right: 6px;"></i> ${f}
-              </span>
-            `).join('')}
-          </div>
+            if (specs.length === 0) return '';
+            return `
+              <h4 style="font-size: 0.75rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #64748B; margin-bottom: 16px;">
+                ${en ? 'Performance & Technical Specs' : 'Performans & Teknik Özellikler'}
+              </h4>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px;">
+                ${specs.map(s => `
+                  <div style="background: #F8FAFC; padding: 14px; border-radius: 16px; border: 1px solid #E2E8F0; text-align: center;">
+                    <i class="${s.icon}" style="font-size: 1.4rem; color: var(--noble-gold);"></i>
+                    <p style="font-size: 0.65rem; font-weight: 700; color: #94A3B8; margin-top: 4px;">${s.label}</p>
+                    <p style="font-size: 0.95rem; font-weight: 800;">${s.value}</p>
+                  </div>
+                `).join('')}
+              </div>
+            `;
+          })()}
+
+          ${(car.features && car.features.length) ? `
+            <h4 style="font-size: 0.75rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #64748B; margin-bottom: 12px;">
+              ${currentLang === 'EN' ? 'Featured VIP Equipment' : 'Öne Çıkan VIP Donanımlar'}
+            </h4>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px;">
+              ${car.features.map(f => `
+                <span style="background: var(--noble-gold-light); color: var(--noble-charcoal); padding: 6px 14px; border-radius: 99px; font-size: 0.72rem; font-weight: 700;">
+                  <i class="ri-checkbox-circle-fill" style="color: var(--noble-gold); margin-right: 6px;"></i> ${f}
+                </span>
+              `).join('')}
+            </div>
+          ` : ''}
         </div>
 
         <div style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 24px; border-radius: 24px; display: flex; flex-direction: column; justify-content: space-between;">
@@ -1268,14 +1301,30 @@ function openCarDetailModal(carId) {
             <h3 class="font-serif text-4xl" style="color: var(--noble-gold); font-weight: 800; margin-bottom: 16px;">₺${car.price.toLocaleString('tr-TR')}</h3>
             
             <div style="border-top: 1px solid #E2E8F0; padding-top: 16px; margin-top: 16px;">
+              ${car.deposit ? `
               <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 8px;">
                 <span style="color: #64748B;">${dict.depositLabel}:</span>
                 <span style="font-weight: 700;">₺${car.deposit.toLocaleString('tr-TR')}</span>
               </div>
+              ` : ''}
+              ${car.kmLimit ? `
               <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 8px;">
                 <span style="color: #64748B;">${currentLang === 'EN' ? 'Daily KM Limit' : 'Günlük KM Sınırı'}:</span>
-                <span style="font-weight: 700;">350 KM</span>
+                <span style="font-weight: 700;">${car.kmLimit} KM</span>
               </div>
+              ` : ''}
+              ${car.minAge ? `
+              <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 8px;">
+                <span style="color: #64748B;">${currentLang === 'EN' ? 'Min. Driver Age' : 'Min. Sürücü Yaşı'}:</span>
+                <span style="font-weight: 700;">${car.minAge}</span>
+              </div>
+              ` : ''}
+              ${car.minLicenseYears ? `
+              <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 8px;">
+                <span style="color: #64748B;">${currentLang === 'EN' ? 'Min. License Age' : 'Min. Ehliyet Yılı'}:</span>
+                <span style="font-weight: 700;">${car.minLicenseYears} ${currentLang === 'EN' ? 'Years' : 'Yıl'}</span>
+              </div>
+              ` : ''}
             </div>
           </div>
 
@@ -1313,6 +1362,16 @@ function closeModal(modalId) {
 }
 
 // Booking & Checkout Engine
+function calcExtrasTotal(days) {
+  let total = 0;
+  for (const key in extrasSettings) {
+    const cfg = extrasSettings[key];
+    if (!cfg.enabled || !checkoutBookingData.extras || !checkoutBookingData.extras[key]) continue;
+    total += cfg.perDay ? cfg.price * days : cfg.price;
+  }
+  return total;
+}
+
 function startBooking(carId) {
   const car = vehicles.find(v => v.id === carId);
   if (!car) return;
@@ -1320,14 +1379,14 @@ function startBooking(carId) {
   selectedCarForBooking = car;
   currentCheckoutStep = 1;
 
+  // Ekstralar müşterinin seçimine bırakılır — hiçbiri önceden işaretli gelmez
+  const initialExtras = {};
+  for (const key in extrasSettings) initialExtras[key] = false;
+
   checkoutBookingData = {
     days: 3,
     pickupLoc: 'İstanbul Havalimanı (IST)',
-    extras: {
-      unlimitedKm: false,
-      fullKasko: true,
-      vipValet: true
-    }
+    extras: initialExtras
   };
 
   const modalBackdrop = document.getElementById('checkout-modal');
@@ -1353,11 +1412,8 @@ function updateCheckoutModalView() {
   else if (days >= 3) discountPerc = 0.05;
 
   const subtotal = Math.round(dailyRate * days * (1 - discountPerc));
-  
-  let extrasTotal = 0;
-  if (checkoutBookingData.extras.fullKasko) extrasTotal += 500 * days;
-  if (checkoutBookingData.extras.unlimitedKm) extrasTotal += 350 * days;
-  if (checkoutBookingData.extras.vipValet) extrasTotal += 450;
+
+  const extrasTotal = calcExtrasTotal(days);
 
   const vat = Math.round((subtotal + extrasTotal) * 0.20);
   const grandTotal = subtotal + extrasTotal + vat;
@@ -1405,39 +1461,61 @@ function updateCheckoutModalView() {
           ` : currentCheckoutStep === 2 ? `
             <h4 style="font-size: 0.85rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px;">Güvence ve Ekstra Hizmetler</h4>
             <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
-              <label class="p-4 rounded-2xl border border-gray-200 flex items-center justify-between cursor-pointer">
-                <div class="flex items-center gap-3">
-                  <input type="checkbox" ${checkoutBookingData.extras.fullKasko ? 'checked' : ''} onchange="checkoutBookingData.extras.fullKasko = this.checked; updateCheckoutModalView();">
-                  <div>
-                    <strong class="text-sm font-bold">Muafiyetsiz Tam Kasko Güvencesi</strong>
-                    <p class="text-xs text-gray-500">Kaza ve çizilmelere karşı %100 sıfır muafiyet.</p>
+              ${Object.entries(extrasSettings).filter(([, cfg]) => cfg.enabled).map(([key, cfg]) => `
+                <label class="p-4 rounded-2xl border border-gray-200 flex items-center justify-between cursor-pointer">
+                  <div class="flex items-center gap-3">
+                    <input type="checkbox" ${checkoutBookingData.extras[key] ? 'checked' : ''} onchange="checkoutBookingData.extras['${key}'] = this.checked; updateCheckoutModalView();">
+                    <div>
+                      <strong class="text-sm font-bold">${cfg.label}</strong>
+                      <p class="text-xs text-gray-500">${cfg.desc || ''}</p>
+                    </div>
                   </div>
-                </div>
-                <span class="text-sm font-bold text-amber-600">+₺500 / gün</span>
-              </label>
+                  <span class="text-sm font-bold text-amber-600" style="white-space: nowrap;">+₺${cfg.price.toLocaleString('tr-TR')}${cfg.perDay ? ' / gün' : ''}</span>
+                </label>
+              `).join('') || '<p class="text-xs text-gray-500">Şu anda sunulan ekstra hizmet bulunmuyor.</p>'}
             </div>
             <button onclick="currentCheckoutStep = 3; updateCheckoutModalView();" class="btn-noble-gold" style="width: 100%; justify-content: center; padding: 16px;">
-              3D Ödeme Adımına İlerle <i class="ri-arrow-right-line"></i>
+              Onay ve Ödeme Adımına İlerle <i class="ri-arrow-right-line"></i>
             </button>
           ` : currentCheckoutStep === 3 ? `
-            <h4 style="font-size: 0.85rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px;">3D Secure Güvenli Ödeme</h4>
-            <form onsubmit="event.preventDefault(); trigger3DSecureOTP();" style="display: flex; flex-direction: column; gap: 16px;">
-              <div class="form-group">
-                <label class="form-label">KART ÜZERİNDEKİ İSİM</label>
-                <input type="text" required class="form-input" placeholder="MEHMET YILMAZ">
+            <h4 style="font-size: 0.85rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px;">Rezervasyon Onayı & Ödeme</h4>
+            ${(paymentSettings.enabled && paymentSettings.paymentLink) ? `
+              <div style="background: #F0FDF4; border: 1px solid #BBF7D0; padding: 16px; border-radius: 16px; margin-bottom: 16px;">
+                <p style="font-size: 0.8rem; color: #166534; line-height: 1.6;">
+                  <i class="ri-shield-check-line"></i> Ödemeniz <strong>${paymentSettings.providerName}</strong> güvenli ödeme sayfasında alınır.
+                  Kart bilgileriniz sitemizden geçmez. Açılan sayfada toplam tutarı
+                  (<strong>₺${grandTotal.toLocaleString('tr-TR')}</strong>) girerek ödemenizi tamamlayabilirsiniz.
+                </p>
               </div>
-              <div class="form-group">
-                <label class="form-label">KART NUMARASI</label>
-                <input type="text" required class="form-input" placeholder="4543 •••• •••• ••••" maxlength="19">
-              </div>
-              <button type="submit" class="btn-noble-primary" style="width: 100%; justify-content: center; padding: 16px;">
-                <i class="ri-shield-flash-line"></i> ₺${grandTotal.toLocaleString('tr-TR')} Ödemeyi Tamamla
+              <button onclick="completeReservation(true)" class="btn-noble-primary" style="width: 100%; justify-content: center; padding: 16px;">
+                <i class="ri-bank-card-line"></i> Rezervasyonu Oluştur ve Güvenli Ödemeye Geç
               </button>
-            </form>
+              <button onclick="completeReservation(false)" class="btn-noble-outline" style="width: 100%; justify-content: center; padding: 12px; margin-top: 10px; font-size: 0.75rem;">
+                Ödemeyi Sonra Yap (Ofis Onayıyla Rezervasyon)
+              </button>
+            ` : `
+              <div style="background: #FFFBEB; border: 1px solid #FDE68A; padding: 16px; border-radius: 16px; margin-bottom: 16px;">
+                <p style="font-size: 0.8rem; color: #92400E; line-height: 1.6;">
+                  <i class="ri-information-line"></i> Rezervasyonunuz oluşturulduktan sonra ekibimiz ödeme ve
+                  teslimat detayları için sizinle iletişime geçecektir.
+                </p>
+              </div>
+              <button onclick="completeReservation(false)" class="btn-noble-primary" style="width: 100%; justify-content: center; padding: 16px;">
+                <i class="ri-check-double-line"></i> Rezervasyonu Onayla (₺${grandTotal.toLocaleString('tr-TR')})
+              </button>
+            `}
           ` : `
             <div style="background: white; padding: 24px; border-radius: 20px; border: 1px solid #E2E8F0;">
               <h3 class="font-serif text-2xl font-bold mb-2">Rezervasyon Başarılı!</h3>
               <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 16px;">PNR Kodunuz: <strong>${checkoutBookingData.pnr || 'RES-94823'}</strong></p>
+              ${(checkoutBookingData.paymentOpened && paymentSettings.enabled && paymentSettings.paymentLink) ? `
+                <p style="font-size: 0.78rem; color: #166534; background: #F0FDF4; border: 1px solid #BBF7D0; padding: 12px; border-radius: 12px; margin-bottom: 14px;">
+                  Ödeme sayfası yeni sekmede açıldı. Açılmadıysa aşağıdaki butonu kullanabilirsiniz.
+                </p>
+                <button onclick="window.open('${paymentSettings.paymentLink}', '_blank')" class="btn-noble-primary" style="padding: 10px 20px; font-size: 0.7rem; margin-right: 8px;">
+                  <i class="ri-bank-card-line"></i> Ödeme Sayfasını Aç
+                </button>
+              ` : ''}
               <button onclick="downloadReservationPDF('${checkoutBookingData.pnr}')" class="btn-noble-gold" style="padding: 10px 20px; font-size: 0.7rem;">
                 <i class="ri-file-pdf-line"></i> Rezervasyon Fişini İndir (PDF)
               </button>
@@ -1475,9 +1553,10 @@ function validateAndNextStep(nextStep) {
   updateCheckoutModalView();
 }
 
-async function trigger3DSecureOTP() {
+async function completeReservation(openPayment) {
   const pnr = 'RES-' + Math.floor(100000 + Math.random() * 900000);
   checkoutBookingData.pnr = pnr;
+  checkoutBookingData.paymentOpened = !!openPayment;
 
   // Calculate actual pricing for reservation record
   const days = checkoutBookingData.days || 3;
@@ -1487,12 +1566,9 @@ async function trigger3DSecureOTP() {
   else if (days >= 7) discountPerc = 0.10;
   else if (days >= 3) discountPerc = 0.05;
   const subtotal = Math.round(dailyRate * days * (1 - discountPerc));
-  
-  let extrasTotal = 0;
-  if (checkoutBookingData.extras.fullKasko) extrasTotal += 500 * days;
-  if (checkoutBookingData.extras.unlimitedKm) extrasTotal += 350 * days;
-  if (checkoutBookingData.extras.vipValet) extrasTotal += 450;
-  
+
+  const extrasTotal = calcExtrasTotal(days);
+
   const vat = Math.round((subtotal + extrasTotal) * 0.20);
   const grandTotal = subtotal + extrasTotal + vat;
 
@@ -1510,7 +1586,21 @@ async function trigger3DSecureOTP() {
     endDate: returnInput ? returnInput.value : '2026-07-15',
     totalPrice: grandTotal,
     status: 'Beklemede',
+    paymentStatus: openPayment
+      ? `${paymentSettings.providerName} ödeme sayfası açıldı`
+      : 'Ödeme bekleniyor (iletişimde alınacak)',
     createdAt: new Date().toISOString().slice(0, 16).replace('T', ' ')
+  };
+
+  const finishBooking = () => {
+    if (openPayment && paymentSettings.paymentLink) {
+      window.open(paymentSettings.paymentLink, '_blank');
+      showToast('Rezervasyonunuz oluşturuldu! Güvenli ödeme sayfası açılıyor...', 'success');
+    } else {
+      showToast('Rezervasyonunuz başarıyla oluşturuldu!', 'success');
+    }
+    currentCheckoutStep = 4;
+    updateCheckoutModalView();
   };
 
   // Sync to Firebase
@@ -1519,18 +1609,14 @@ async function trigger3DSecureOTP() {
       const { doc, setDoc } = window.firestoreTools;
       await setDoc(doc(window.db, "reservations", newReservation.id), newReservation);
       console.log("Reservation successfully synced to Firestore!");
-      showToast('3D Secure Banka Doğrulaması Başarılı!', 'success');
-      currentCheckoutStep = 4;
-      updateCheckoutModalView();
+      finishBooking();
     } catch (err) {
       console.error("Firebase reservation sync error:", err);
       showToast('Rezervasyon kaydedilirken bir hata oluştu. Lütfen tekrar deneyin.', 'error');
     }
   } else {
     // Fallback if Firebase is not active
-    showToast('3D Secure Banka Doğrulaması Başarılı!', 'success');
-    currentCheckoutStep = 4;
-    updateCheckoutModalView();
+    finishBooking();
   }
 }
 
@@ -1568,10 +1654,7 @@ function downloadReservationPDF(pnr) {
   else if (days >= 3) discountPerc = 0.05;
 
   const subtotal = Math.round(dailyRate * days * (1 - discountPerc));
-  let extrasTotal = 0;
-  if (checkoutBookingData.extras.fullKasko) extrasTotal += 500 * days;
-  if (checkoutBookingData.extras.unlimitedKm) extrasTotal += 350 * days;
-  if (checkoutBookingData.extras.vipValet) extrasTotal += 450;
+  const extrasTotal = calcExtrasTotal(days);
 
   const vat = Math.round((subtotal + extrasTotal) * 0.20);
   const grandTotal = res.totalPrice || (subtotal + extrasTotal + vat);
@@ -1609,6 +1692,7 @@ function downloadReservationPDF(pnr) {
           <tr><td style="padding: 2px 0; color: #64748B;">Telefon:</td><td style="font-weight: bold;">${res.customerPhone}</td></tr>
           <tr><td style="padding: 2px 0; color: #64748B;">E-posta:</td><td>${res.customerEmail}</td></tr>
           <tr><td style="padding: 2px 0; color: #64748B;">T.C. Kimlik:</td><td>${checkoutBookingData.custTc || '---'}</td></tr>
+          ${res.paymentStatus ? `<tr><td style="padding: 2px 0; color: #64748B;">Ödeme:</td><td>${res.paymentStatus}</td></tr>` : ''}
         </table>
       </div>
       
@@ -1651,30 +1735,14 @@ function downloadReservationPDF(pnr) {
             <td style="text-align: right;">-₺${Math.round(dailyRate * days * discountPerc).toLocaleString('tr-TR')}</td>
           </tr>
           ` : ''}
-          ${checkoutBookingData.extras.fullKasko ? `
+          ${Object.entries(extrasSettings).filter(([key, cfg]) => cfg.enabled && checkoutBookingData.extras && checkoutBookingData.extras[key]).map(([key, cfg]) => `
           <tr>
-            <td style="padding: 4px 0;">Muafiyetsiz Tam Kasko Güvencesi</td>
-            <td style="text-align: right;">₺500</td>
-            <td style="text-align: right;">${days} Gün</td>
-            <td style="text-align: right;">₺${(500 * days).toLocaleString('tr-TR')}</td>
+            <td style="padding: 4px 0;">${cfg.label}</td>
+            <td style="text-align: right;">₺${cfg.price.toLocaleString('tr-TR')}</td>
+            <td style="text-align: right;">${cfg.perDay ? `${days} Gün` : '1 Sefer'}</td>
+            <td style="text-align: right;">₺${(cfg.perDay ? cfg.price * days : cfg.price).toLocaleString('tr-TR')}</td>
           </tr>
-          ` : ''}
-          ${checkoutBookingData.extras.unlimitedKm ? `
-          <tr>
-            <td style="padding: 4px 0;">Sınırsız Kilometre Paketi</td>
-            <td style="text-align: right;">₺350</td>
-            <td style="text-align: right;">${days} Gün</td>
-            <td style="text-align: right;">₺${(350 * days).toLocaleString('tr-TR')}</td>
-          </tr>
-          ` : ''}
-          ${checkoutBookingData.extras.vipValet ? `
-          <tr>
-            <td style="padding: 4px 0;">VIP Vale ve Adrese Teslimat</td>
-            <td style="text-align: right;">₺450</td>
-            <td style="text-align: right;">1 Sefer</td>
-            <td style="text-align: right;">₺450</td>
-          </tr>
-          ` : ''}
+          `).join('')}
           <tr style="border-top: 1px solid #E2E8F0; font-weight: bold;">
             <td colspan="3" style="padding: 6px 0; text-align: right;">Ara Toplam:</td>
             <td style="padding: 6px 0; text-align: right;">₺${(subtotal + extrasTotal).toLocaleString('tr-TR')}</td>

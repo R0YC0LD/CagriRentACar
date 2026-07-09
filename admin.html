@@ -11,7 +11,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="styles.css?v=20260709.1">
+  <link rel="stylesheet" href="styles.css?v=20260709.2">
   <!-- HTML to PDF conversion utility library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
@@ -115,7 +115,7 @@
       <button onclick="switchAdminTab('testimonials')" id="tab-btn-testimonials" class="admin-nav-tab btn-noble-outline">Müşteri Yorumları</button>
       <button onclick="switchAdminTab('faq')" id="tab-btn-faq" class="admin-nav-tab btn-noble-outline">SSS (FAQ) Yönetimi</button>
       <button onclick="switchAdminTab('reservations')" id="tab-btn-reservations" class="admin-nav-tab btn-noble-outline">Rezervasyonlar</button>
-      <button onclick="switchAdminTab('pos')" id="tab-btn-pos" class="admin-nav-tab btn-noble-outline">Sanal POS & Ayarlar</button>
+      <button onclick="switchAdminTab('pos')" id="tab-btn-pos" class="admin-nav-tab btn-noble-outline">Ödeme & Ayarlar</button>
     </div>
 
     <!-- TAB 1: FLEET MANAGEMENT -->
@@ -232,53 +232,79 @@
     <section id="admin-sec-pos" class="admin-sec-view hidden">
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        <!-- Virtual POS Config -->
-        <div class="lg:col-span-7 bg-white p-6 md:p-8 rounded-3xl border border-gray-200 shadow-sm">
-          <h2 class="font-serif text-2xl font-bold mb-2"><i class="ri-bank-card-line text-[#C5A059] mr-2"></i>Sanal POS API Yapılandırması</h2>
-          <p class="text-xs text-gray-500 mb-6">Müşteri ödemelerinin doğrudan iletileceği aracı ödeme kuruluşu ayarlarını güncelleyin.</p>
-          
-          <form onsubmit="event.preventDefault(); savePOSConfig();" class="space-y-4">
-            <div class="form-group">
-              <label class="form-label">Sanal POS Sağlayıcısı</label>
-              <select id="pos-provider" class="form-select">
-                <option value="PayTR">PayTR Sanal POS</option>
-                <option value="iyzico">iyzico Payment Gateway</option>
-                <option value="Garanti">Garanti BBVA VPOS</option>
-                <option value="Akbank">Akbank VPOS</option>
-                <option value="IsBank">İş Bankası NestPay</option>
-                <option value="YapıKredi">Yapı Kredi Posnet</option>
-              </select>
-            </div>
-            
-            <div class="grid grid-cols-2 gap-4">
+        <!-- Online Payment Link Config -->
+        <div class="lg:col-span-7 space-y-6">
+          <div class="bg-white p-6 md:p-8 rounded-3xl border border-gray-200 shadow-sm">
+            <h2 class="font-serif text-2xl font-bold mb-2"><i class="ri-bank-card-line text-[#C5A059] mr-2"></i>Online Ödeme (Ödeme Bağlantısı)</h2>
+            <p class="text-xs text-gray-500 mb-6">Müşteri, rezervasyonun son adımında aşağıdaki güvenli ödeme sayfasına yönlendirilir. Kart bilgileri sitenizden geçmez; tahsilat ödeme kuruluşunun kendi sayfasında yapılır.</p>
+
+            <form onsubmit="event.preventDefault(); savePaymentSettings();" class="space-y-4">
               <div class="form-group">
-                <label class="form-label">MAĞAZA KODU (MERCHANT ID)</label>
-                <input type="text" id="pos-merchant-id" required class="form-input" placeholder="Örn: 123456">
+                <label class="form-label">ÖDEME SAĞLAYICI ADI (MÜŞTERİYE GÖSTERİLİR)</label>
+                <input type="text" id="pay-provider-name" class="form-input" placeholder="Örn: iyzico">
               </div>
+
               <div class="form-group">
-                <label class="form-label">API ANAHTARI (API KEY)</label>
-                <input type="text" id="pos-api-key" required class="form-input" placeholder="API Key Değeri">
+                <label class="form-label">ÖDEME BAĞLANTISI (LİNK)</label>
+                <input type="url" id="pay-link" class="form-input" placeholder="https://iyzi.link/XXXXXX">
+                <p style="font-size: 0.7rem; color: #64748B; margin-top: 6px; line-height: 1.5;">
+                  Bu linki ödeme kuruluşunuzdan alırsınız: <strong>iyzico</strong>'da "iyzico Link" (Link ile Ödeme Al),
+                  <strong>PayTR</strong>'de "Link ile Ödeme" bölümünden ücretsiz oluşturabilirsiniz.
+                  Tutarı müşterinin gireceği "serbest tutar" tipinde bir link oluşturmanız yeterlidir.
+                </p>
               </div>
-            </div>
 
-            <div class="form-group">
-              <label class="form-label">GÜVENLİK ANAHTARI (SECRET KEY)</label>
-              <input type="password" id="pos-secret-key" required class="form-input" placeholder="Secret Key Değeri">
-            </div>
-
-            <div class="flex gap-6 py-2">
-              <label class="flex items-center gap-2 text-xs font-bold cursor-pointer">
-                <input type="checkbox" id="pos-3d-secure" class="rounded"> 3D Secure Güvenlik Zorunlu
+              <label class="flex items-center gap-2 text-xs font-bold cursor-pointer py-2">
+                <input type="checkbox" id="pay-enabled" class="rounded"> Online ödemeyi etkinleştir (kapalıysa müşteri ödemesiz rezervasyon oluşturur, ödemeyi siz iletişimde alırsınız)
               </label>
-              <label class="flex items-center gap-2 text-xs font-bold cursor-pointer">
-                <input type="checkbox" id="pos-test-mode" class="rounded"> Test / Sandbox Modu
-              </label>
-            </div>
 
-            <button type="submit" class="btn-noble-gold w-full justify-center py-4">
-              Ayarları Kaydet <i class="ri-save-line ml-2"></i>
-            </button>
-          </form>
+              <button type="submit" class="btn-noble-gold w-full justify-center py-4">
+                Ödeme Ayarlarını Kaydet <i class="ri-save-line ml-2"></i>
+              </button>
+            </form>
+          </div>
+
+          <!-- Extras Pricing Config -->
+          <div class="bg-white p-6 md:p-8 rounded-3xl border border-gray-200 shadow-sm">
+            <h2 class="font-serif text-2xl font-bold mb-2"><i class="ri-service-line text-[#C5A059] mr-2"></i>Ekstra Hizmetler & Fiyatları</h2>
+            <p class="text-xs text-gray-500 mb-6">Rezervasyon sırasında müşteriye sunulan ek hizmetler. Kapattığınız hizmet müşteriye hiç gösterilmez.</p>
+
+            <form onsubmit="event.preventDefault(); saveExtrasSettings();" class="space-y-4">
+              <div class="flex items-center justify-between gap-4 p-3 rounded-2xl border border-gray-200">
+                <label class="flex items-center gap-2 text-xs font-bold cursor-pointer flex-1">
+                  <input type="checkbox" id="extra-kasko-enabled" class="rounded"> Muafiyetsiz Tam Kasko Güvencesi
+                </label>
+                <div class="flex items-center gap-2">
+                  <input type="number" id="extra-kasko-price" min="0" class="form-input" style="width: 110px;" placeholder="500">
+                  <span class="text-xs font-bold text-gray-500 whitespace-nowrap">₺ / gün</span>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between gap-4 p-3 rounded-2xl border border-gray-200">
+                <label class="flex items-center gap-2 text-xs font-bold cursor-pointer flex-1">
+                  <input type="checkbox" id="extra-km-enabled" class="rounded"> Sınırsız Kilometre Paketi
+                </label>
+                <div class="flex items-center gap-2">
+                  <input type="number" id="extra-km-price" min="0" class="form-input" style="width: 110px;" placeholder="350">
+                  <span class="text-xs font-bold text-gray-500 whitespace-nowrap">₺ / gün</span>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between gap-4 p-3 rounded-2xl border border-gray-200">
+                <label class="flex items-center gap-2 text-xs font-bold cursor-pointer flex-1">
+                  <input type="checkbox" id="extra-valet-enabled" class="rounded"> VIP Vale ve Adrese Teslimat
+                </label>
+                <div class="flex items-center gap-2">
+                  <input type="number" id="extra-valet-price" min="0" class="form-input" style="width: 110px;" placeholder="450">
+                  <span class="text-xs font-bold text-gray-500 whitespace-nowrap">₺ / tek sefer</span>
+                </div>
+              </div>
+
+              <button type="submit" class="btn-noble-primary w-full justify-center py-4">
+                Ekstra Hizmetleri Kaydet <i class="ri-save-line ml-2"></i>
+              </button>
+            </form>
+          </div>
         </div>
 
         <!-- Password Change -->
@@ -302,7 +328,7 @@
             <h4 class="font-bold uppercase tracking-wider mb-2 flex items-center gap-1">
               <i class="ri-information-line text-lg"></i> Önemli Not
             </h4>
-            Sanal POS ve şifre yapılandırmaları tarayıcı yerel hafızasında (localStorage) ve Firebase Firestore veri tabanında senkronize şekilde korunur. Canlı işlemlerde API erişimi için SSL sertifikası zorunludur.
+            Ödeme bağlantısı ve ekstra hizmet ayarları Firebase Firestore veri tabanında saklanır ve tüm cihazlara anında yansır. Kart bilgileri hiçbir zaman bu sitede işlenmez veya saklanmaz; tahsilat, ödeme kuruluşunun kendi güvenli sayfasında gerçekleşir.
           </div>
         </div>
 
@@ -361,6 +387,79 @@
                 <option value="Hibrit">Hibrit</option>
               </select>
             </div>
+          </div>
+
+          <div style="border-top: 1px solid #E2E8F0; padding-top: 16px; margin-top: 8px;">
+            <p class="text-xs font-bold text-gray-700 mb-1">DETAYLI ARAÇ ÖZELLİKLERİ</p>
+            <p style="font-size: 0.7rem; color: #64748B; margin-bottom: 12px;">Tüm alanlar opsiyoneldir — boş bıraktığınız bilgi müşteriye hiç gösterilmez.</p>
+          </div>
+
+          <div class="grid grid-cols-3 gap-4">
+            <div class="form-group">
+              <label class="form-label">MODEL YILI</label>
+              <input type="number" id="new-car-year" min="1990" max="2050" class="form-input" placeholder="2024">
+            </div>
+            <div class="form-group">
+              <label class="form-label">VİTES</label>
+              <select id="new-car-transmission" class="form-select">
+                <option value="Otomatik">Otomatik</option>
+                <option value="Manuel">Manuel</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">RENK</label>
+              <input type="text" id="new-car-color" class="form-input" placeholder="Siyah">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-4">
+            <div class="form-group">
+              <label class="form-label">MOTOR GÜCÜ (HP)</label>
+              <input type="number" id="new-car-power" min="0" class="form-input" placeholder="220">
+            </div>
+            <div class="form-group">
+              <label class="form-label">0-100 KM/S (SANİYE)</label>
+              <input type="number" id="new-car-accel" min="0" step="0.1" class="form-input" placeholder="6.8">
+            </div>
+            <div class="form-group">
+              <label class="form-label">TÜKETİM (LT/100KM)</label>
+              <input type="number" id="new-car-consumption" min="0" step="0.1" class="form-input" placeholder="7.5">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-4">
+            <div class="form-group">
+              <label class="form-label">KOLTUK SAYISI</label>
+              <input type="number" id="new-car-seats" min="1" max="12" class="form-input" placeholder="5">
+            </div>
+            <div class="form-group">
+              <label class="form-label">BAGAJ (BAVUL)</label>
+              <input type="number" id="new-car-luggage" min="0" max="12" class="form-input" placeholder="3">
+            </div>
+            <div class="form-group">
+              <label class="form-label">PLAKA</label>
+              <input type="text" id="new-car-plate" class="form-input" placeholder="05 ABC 123">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-4">
+            <div class="form-group">
+              <label class="form-label">GÜNLÜK KM LİMİTİ</label>
+              <input type="number" id="new-car-kmlimit" min="0" class="form-input" placeholder="350">
+            </div>
+            <div class="form-group">
+              <label class="form-label">MİN. SÜRÜCÜ YAŞI</label>
+              <input type="number" id="new-car-minage" min="18" max="80" class="form-input" placeholder="21">
+            </div>
+            <div class="form-group">
+              <label class="form-label">MİN. EHLİYET YILI</label>
+              <input type="number" id="new-car-minlicense" min="0" max="50" class="form-input" placeholder="2">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">DONANIMLAR (VİRGÜLLE AYIRIN)</label>
+            <textarea id="new-car-features" rows="2" class="form-textarea" placeholder="Deri döşeme, Sunroof, Isıtmalı koltuk, Geri görüş kamerası"></textarea>
           </div>
 
           <div class="form-group">
@@ -431,7 +530,7 @@
   </div>
 
   <!-- Javascript Logic for Admin -->
-  <script src="admin.js?v=20260709.1"></script>
+  <script src="admin.js?v=20260709.2"></script>
 
 </body>
 </html>

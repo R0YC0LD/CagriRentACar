@@ -7,23 +7,27 @@
 const ADMIN_PASSWORD_PRIMARY = "05admıncagrıamasyarentacar";
 const ADMIN_PASSWORD_ASCII = "05admincagriamasyarentacar";
 
-const INITIAL_POS_CONFIG = {
-  provider: 'PayTR',
-  merchantId: '123456',
-  apiKey: 'paytr_live_key_984128941',
-  secretKey: 'paytr_secret_key_841294812',
-  is3DSecure: true,
-  isTestMode: true
+const DEFAULT_PAYMENT_SETTINGS = {
+  providerName: 'iyzico',
+  paymentLink: '',
+  enabled: false
 };
-// NOTE: All vehicle, FAQ and testimonial data is managed exclusively via
-// Firestore. Use the Admin Panel to add or edit data.
+
+const DEFAULT_EXTRAS_SETTINGS = {
+  fullKasko: { label: 'Muafiyetsiz Tam Kasko Güvencesi', price: 500, perDay: true, enabled: true },
+  unlimitedKm: { label: 'Sınırsız Kilometre Paketi', price: 350, perDay: true, enabled: true },
+  vipValet: { label: 'VIP Vale ve Adrese Teslimat', price: 450, perDay: false, enabled: true }
+};
+// NOTE: All vehicle, FAQ, testimonial and settings data is managed exclusively
+// via Firestore. Use the Admin Panel to add or edit data.
 
 // Global Admin States
 let vehicles = [];
 let faqs = [];
 let testimonials = [];
 let reservations = [];
-let posConfig = INITIAL_POS_CONFIG;
+let paymentSettings = { ...DEFAULT_PAYMENT_SETTINGS };
+let extrasSettings = JSON.parse(JSON.stringify(DEFAULT_EXTRAS_SETTINGS));
 let customAdminPassword = ADMIN_PASSWORD_PRIMARY;
 let isDbLoading = true;
 
@@ -35,7 +39,7 @@ let tempCarImages = [];
 // Initialize Page
 document.addEventListener('DOMContentLoaded', () => {
   updateUIForLoginState();
-  initFormInputsFromPOSConfig();
+  initSettingsForms();
 
   // Firebase module is type="module" (async) — wait for it to be ready
   function onFirebaseReady() {
@@ -299,7 +303,10 @@ function renderAdminTable() {
             <td>${res.carName}</td>
             <td>${res.startDate} / ${res.endDate}</td>
             <td style="font-weight: 800; color: var(--noble-gold);">₺${res.totalPrice.toLocaleString('tr-TR')}</td>
-            <td><span class="badge-status ${statusClass}">${res.status}</span></td>
+            <td>
+              <span class="badge-status ${statusClass}">${res.status}</span>
+              ${res.paymentStatus ? `<p style="font-size: 0.62rem; color: #94A3B8; margin-top: 3px;"><i class="ri-bank-card-line"></i> ${res.paymentStatus}</p>` : ''}
+            </td>
             <td style="text-align: right; white-space: nowrap;">
               <div style="display: inline-flex; gap: 4px; justify-content: flex-end;">
                 <button onclick="downloadReservationPDF('${res.id}')" class="btn-noble-outline" style="padding: 4px 8px; font-size: 0.65rem; color: #C5A059; border-color: rgba(197, 160, 89, 0.2);" title="PDF Rezervasyon Fişi İndir">
@@ -401,7 +408,16 @@ function openAddCarModal() {
   document.getElementById('new-car-images-urls').value = '';
   document.getElementById('new-car-thumbs-preview').innerHTML = '';
   document.getElementById('new-car-prestige').checked = false;
-  
+
+  // Detaylı özellik alanlarını sıfırla
+  ['new-car-year', 'new-car-color', 'new-car-power', 'new-car-accel', 'new-car-consumption',
+   'new-car-seats', 'new-car-luggage', 'new-car-plate', 'new-car-kmlimit', 'new-car-minage',
+   'new-car-minlicense', 'new-car-features'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('new-car-transmission').value = 'Otomatik';
+
   modal.classList.add('active');
 }
 
@@ -424,6 +440,21 @@ function openEditCarModal(carId) {
   document.getElementById('new-car-fuel').value = car.fuel;
   document.getElementById('new-car-images-urls').value = tempCarImages.join('\n');
   document.getElementById('new-car-prestige').checked = car.isPrestige || false;
+
+  // Detaylı özellikler (eski kayıtlarda olmayabilir — boş bırakılır)
+  document.getElementById('new-car-year').value = car.year || '';
+  document.getElementById('new-car-transmission').value = car.transmission === 'Manuel' ? 'Manuel' : 'Otomatik';
+  document.getElementById('new-car-color').value = car.color || '';
+  document.getElementById('new-car-power').value = (typeof car.power === 'number') ? car.power : (parseInt(car.power) || '');
+  document.getElementById('new-car-accel').value = (typeof car.acceleration === 'number') ? car.acceleration : (parseFloat(car.acceleration) || '');
+  document.getElementById('new-car-consumption').value = car.consumption || '';
+  document.getElementById('new-car-seats').value = car.seats || '';
+  document.getElementById('new-car-luggage').value = car.luggage || '';
+  document.getElementById('new-car-plate').value = car.plate || '';
+  document.getElementById('new-car-kmlimit').value = car.kmLimit || '';
+  document.getElementById('new-car-minage').value = car.minAge || '';
+  document.getElementById('new-car-minlicense').value = car.minLicenseYears || '';
+  document.getElementById('new-car-features').value = (car.features || []).join(', ');
 
   renderCarThumbsPreview();
   modal.classList.add('active');
@@ -482,6 +513,26 @@ async function saveCarFromModal() {
   const urlInput = document.getElementById('new-car-images-urls').value.trim();
   const isPrestige = document.getElementById('new-car-prestige').checked;
 
+  // Detaylı özellikler — boş bırakılan alan null kaydedilir ve müşteriye gösterilmez
+  const numOrNull = (id) => {
+    const v = parseFloat(document.getElementById(id).value);
+    return isNaN(v) ? null : v;
+  };
+  const year = numOrNull('new-car-year');
+  const transmission = document.getElementById('new-car-transmission').value;
+  const color = document.getElementById('new-car-color').value.trim() || null;
+  const power = numOrNull('new-car-power');
+  const acceleration = numOrNull('new-car-accel');
+  const consumption = numOrNull('new-car-consumption');
+  const seats = numOrNull('new-car-seats');
+  const luggage = numOrNull('new-car-luggage');
+  const plate = document.getElementById('new-car-plate').value.trim() || null;
+  const kmLimit = numOrNull('new-car-kmlimit');
+  const minAge = numOrNull('new-car-minage');
+  const minLicenseYears = numOrNull('new-car-minlicense');
+  const features = document.getElementById('new-car-features').value
+    .split(',').map(f => f.trim()).filter(Boolean);
+
   // Combine text urls and reader base64 images
   let textUrls = urlInput ? urlInput.split('\n').map(u => u.trim()).filter(Boolean) : [];
   let allImages = [...textUrls, ...tempCarImages.filter(img => img.startsWith('data:'))];
@@ -502,15 +553,19 @@ async function saveCarFromModal() {
     image: mainImage,
     images: allImages,
     isPrestige,
-    transmission: 'Otomatik',
-    seats: category === 'SUV' ? 5 : category === 'Spor' ? 2 : 5,
-    luggage: category === 'SUV' ? 5 : 3,
-    power: '220 HP',
-    acceleration: '6.8s (0-100)',
-    topSpeed: '240 km/h',
-    badge: 'Luxury VIP',
-    plate: '34 CGR ' + Math.floor(100 + Math.random() * 900),
-    features: ['Deri Döşeme', 'Cam Tavan', 'Yeni Nesil Kokpit']
+    year,
+    transmission,
+    color,
+    power,
+    acceleration,
+    consumption,
+    seats,
+    luggage,
+    plate,
+    kmLimit,
+    minAge,
+    minLicenseYears,
+    features
   };
 
   // If this car is marked as prestige, reset all other cars' prestige flag
@@ -780,6 +835,7 @@ function downloadReservationPDF(pnr) {
           <tr><td style="padding: 2px 0; color: #64748B;">Telefon:</td><td style="font-weight: bold;">${res.customerPhone}</td></tr>
           <tr><td style="padding: 2px 0; color: #64748B;">E-posta:</td><td>${res.customerEmail || '---'}</td></tr>
           <tr><td style="padding: 2px 0; color: #64748B;">Durum:</td><td style="font-weight: bold; color: ${res.status === 'Onaylandı' ? '#10B981' : res.status === 'Beklemede' ? '#F59E0B' : '#EF4444'};">${res.status}</td></tr>
+          ${res.paymentStatus ? `<tr><td style="padding: 2px 0; color: #64748B;">Ödeme:</td><td>${res.paymentStatus}</td></tr>` : ''}
         </table>
       </div>
       
@@ -881,42 +937,88 @@ window.deleteReservation = deleteReservation;
 window.downloadReservationPDF = downloadReservationPDF;
 window.cancelReservation = cancelReservation;
 
-// POS & Config Settings
-function initFormInputsFromPOSConfig() {
-  const providerSelect = document.getElementById('pos-provider');
-  const merchantInput = document.getElementById('pos-merchant-id');
-  const apiKeyInput = document.getElementById('pos-api-key');
-  const secretKeyInput = document.getElementById('pos-secret-key');
-  const secureCheck = document.getElementById('pos-3d-secure');
-  const testCheck = document.getElementById('pos-test-mode');
+// Payment Link & Extras Settings
+function initSettingsForms() {
+  const providerInput = document.getElementById('pay-provider-name');
+  const linkInput = document.getElementById('pay-link');
+  const enabledCheck = document.getElementById('pay-enabled');
 
-  if (providerSelect) providerSelect.value = posConfig.provider;
-  if (merchantInput) merchantInput.value = posConfig.merchantId;
-  if (apiKeyInput) apiKeyInput.value = posConfig.apiKey;
-  if (secretKeyInput) secretKeyInput.value = posConfig.secretKey;
-  if (secureCheck) secureCheck.checked = posConfig.is3DSecure;
-  if (testCheck) testCheck.checked = posConfig.isTestMode;
+  if (providerInput) providerInput.value = paymentSettings.providerName || '';
+  if (linkInput) linkInput.value = paymentSettings.paymentLink || '';
+  if (enabledCheck) enabledCheck.checked = !!paymentSettings.enabled;
+
+  const extraInputs = {
+    fullKasko: ['extra-kasko-enabled', 'extra-kasko-price'],
+    unlimitedKm: ['extra-km-enabled', 'extra-km-price'],
+    vipValet: ['extra-valet-enabled', 'extra-valet-price']
+  };
+  for (const key in extraInputs) {
+    const [enabledId, priceId] = extraInputs[key];
+    const enabledEl = document.getElementById(enabledId);
+    const priceEl = document.getElementById(priceId);
+    if (enabledEl) enabledEl.checked = !!extrasSettings[key].enabled;
+    if (priceEl) priceEl.value = extrasSettings[key].price;
+  }
 }
 
-function savePOSConfig() {
-  const provider = document.getElementById('pos-provider').value;
-  const merchantId = document.getElementById('pos-merchant-id').value.trim();
-  const apiKey = document.getElementById('pos-api-key').value.trim();
-  const secretKey = document.getElementById('pos-secret-key').value.trim();
-  const is3DSecure = document.getElementById('pos-3d-secure').checked;
-  const isTestMode = document.getElementById('pos-test-mode').checked;
+async function savePaymentSettings() {
+  const providerName = document.getElementById('pay-provider-name').value.trim() || 'Güvenli Ödeme';
+  const paymentLink = document.getElementById('pay-link').value.trim();
+  const enabled = document.getElementById('pay-enabled').checked;
 
-  posConfig = {
-    provider,
-    merchantId,
-    apiKey,
-    secretKey,
-    is3DSecure,
-    isTestMode
+  if (paymentLink && !paymentLink.startsWith('https://')) {
+    showToast('Ödeme bağlantısı "https://" ile başlamalıdır.', 'warning');
+    return;
+  }
+  if (enabled && !paymentLink) {
+    showToast('Online ödemeyi etkinleştirmek için önce ödeme bağlantısını girin.', 'warning');
+    return;
+  }
+
+  paymentSettings = { providerName, paymentLink, enabled };
+
+  if (window.db && window.firestoreTools) {
+    try {
+      const { doc, setDoc } = window.firestoreTools;
+      await setDoc(doc(window.db, "settings", "payment"), paymentSettings);
+      showToast('Ödeme ayarları kaydedildi ve tüm cihazlara yansıtıldı.', 'success');
+    } catch (err) {
+      console.error("Payment settings save error:", err);
+      showToast('Ödeme ayarları kaydedilemedi. Firestore kurallarında "settings" koleksiyonuna izin verildiğinden emin olun.', 'error');
+    }
+  }
+}
+
+async function saveExtrasSettings() {
+  const extraInputs = {
+    fullKasko: ['extra-kasko-enabled', 'extra-kasko-price'],
+    unlimitedKm: ['extra-km-enabled', 'extra-km-price'],
+    vipValet: ['extra-valet-enabled', 'extra-valet-price']
   };
 
-  saveState();
-  showToast('Sanal POS yapılandırması kaydedildi.', 'success');
+  const newExtras = {};
+  for (const key in extraInputs) {
+    const [enabledId, priceId] = extraInputs[key];
+    const price = parseInt(document.getElementById(priceId).value);
+    newExtras[key] = {
+      ...DEFAULT_EXTRAS_SETTINGS[key],
+      enabled: document.getElementById(enabledId).checked,
+      price: (isNaN(price) || price < 0) ? DEFAULT_EXTRAS_SETTINGS[key].price : price
+    };
+  }
+
+  extrasSettings = newExtras;
+
+  if (window.db && window.firestoreTools) {
+    try {
+      const { doc, setDoc } = window.firestoreTools;
+      await setDoc(doc(window.db, "settings", "extras"), extrasSettings);
+      showToast('Ekstra hizmet ayarları kaydedildi ve tüm cihazlara yansıtıldı.', 'success');
+    } catch (err) {
+      console.error("Extras settings save error:", err);
+      showToast('Ekstra ayarları kaydedilemedi. Firestore kurallarında "settings" koleksiyonuna izin verildiğinden emin olun.', 'error');
+    }
+  }
 }
 
 function updateAdminPassword() {
@@ -984,6 +1086,24 @@ function initRealtimeSync() {
       reservations = dbReservations;
       saveState();
       renderAdminTable();
+    });
+
+    // 5. Listen to Settings (payment link & extras)
+    onSnapshot(collection(window.db, "settings"), (snapshot) => {
+      snapshot.forEach((d) => {
+        if (d.id === 'payment') {
+          paymentSettings = { ...DEFAULT_PAYMENT_SETTINGS, ...d.data() };
+        }
+        if (d.id === 'extras') {
+          const data = d.data();
+          const merged = {};
+          for (const key in DEFAULT_EXTRAS_SETTINGS) {
+            merged[key] = { ...DEFAULT_EXTRAS_SETTINGS[key], ...(data[key] || {}) };
+          }
+          extrasSettings = merged;
+        }
+      });
+      initSettingsForms();
     });
   }
 }

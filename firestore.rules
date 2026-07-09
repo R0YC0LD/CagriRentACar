@@ -22,6 +22,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Settings (Ödeme bağlantısı ve ekstra hizmet ayarları) koleksiyonu kuralları
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+
     // Varsayılan kural
     match /{document=**} {
       allow read: if true;
